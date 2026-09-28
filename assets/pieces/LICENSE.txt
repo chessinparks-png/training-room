@@ -1,0 +1,4 @@
+Piece set "maestro" by sadsnake1, from the lichess.org piece collection
+(https://github.com/lichess-org/lila/tree/master/public/piece/maestro).
+License: CC BY-NC-SA 4.0 (https://creativecommons.org/licenses/by-nc-sa/4.0/).
+Used here in a private, non-commercial training application.

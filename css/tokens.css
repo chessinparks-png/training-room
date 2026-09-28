@@ -1,0 +1,71 @@
+/* Design tokens — editorial, restrained. One accent (brass). One error tone (oxblood). */
+@font-face { font-family: 'Playfair Display'; font-style: normal; font-weight: 400; font-display: swap; src: url(../assets/fonts/playfair-display-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Playfair Display'; font-style: italic; font-weight: 400; font-display: swap; src: url(../assets/fonts/playfair-display-latin-400-italic.woff2) format('woff2'); }
+@font-face { font-family: 'Playfair Display'; font-style: normal; font-weight: 500; font-display: swap; src: url(../assets/fonts/playfair-display-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Playfair Display'; font-style: normal; font-weight: 600; font-display: swap; src: url(../assets/fonts/playfair-display-latin-600-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Playfair Display'; font-style: normal; font-weight: 700; font-display: swap; src: url(../assets/fonts/playfair-display-latin-700-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 300; font-display: swap; src: url(../assets/fonts/inter-latin-300-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 400; font-display: swap; src: url(../assets/fonts/inter-latin-400-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 500; font-display: swap; src: url(../assets/fonts/inter-latin-500-normal.woff2) format('woff2'); }
+@font-face { font-family: 'Inter'; font-style: normal; font-weight: 600; font-display: swap; src: url(../assets/fonts/inter-latin-600-normal.woff2) format('woff2'); }
+
+:root {
+  --serif: 'Playfair Display', 'Bodoni 72', Didot, Georgia, 'Times New Roman', serif;
+  --sans: 'Inter', system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Noir edition (default) */
+  --bg: #0c0c0b;
+  --bg-2: #141413;
+  --bg-3: #1c1b19;
+  --ink: #ece7dc;
+  --ink-2: #b8b2a6;
+  --mute: #7d786f;
+  --rule: #2a2825;
+  --rule-2: #3b3834;
+  --accent: #b8965a;
+  --accent-ink: #d7bb86;
+  --error: #a4574a;
+  --focus: #d7bb86;
+  --shade: rgba(0, 0, 0, .55);
+
+  /* Board */
+  --sq-light: #e2dccf;
+  --sq-dark: #8d8575;
+  --sq-coord-light: #8d8575;
+  --sq-coord-dark: #e2dccf;
+  --sq-last: rgba(184, 150, 90, .34);
+  --sq-sel: rgba(184, 150, 90, .55);
+  --sq-dot: rgba(18, 18, 16, .32);
+  --sq-check: rgba(164, 87, 74, .55);
+  --arrow-you: #f6f2ea;
+  --arrow-model: #b8965a;
+  --arrow-engine: #1f1e1c;
+  --board-frame: #050505;
+
+  /* Rhythm */
+  --gutter: clamp(20px, 4vw, 56px);
+  --maxw: 1320px;
+  --t-fast: 160ms;
+  --t-med: 280ms;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+
+  color-scheme: dark;
+}
+
+:root[data-theme="ivory"] {
+  --bg: #f1ede4;
+  --bg-2: #e9e4d9;
+  --bg-3: #e0dacd;
+  --ink: #131311;
+  --ink-2: #3d3a35;
+  --mute: #807a70;
+  --rule: #d6cfc1;
+  --rule-2: #c3bba9;
+  --accent: #8a6630;
+  --accent-ink: #6f4f20;
+  --error: #933f33;
+  --focus: #8a6630;
+  --shade: rgba(20, 18, 14, .35);
+  --board-frame: #131311;
+  color-scheme: light;
+}

@@ -1,0 +1,50 @@
+name: Deploy Training Room
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    outputs:
+      page_url: ${{ steps.deployment.outputs.page_url }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
+      - name: Verify the live site
+        run: |
+          URL="${{ steps.deployment.outputs.page_url }}"
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$URL") && [ "$code" = 200 ] && break; sleep 10; done
+          for f in "" index.html manifest.webmanifest sw.js precache.json js/app.js data/training.json data/repertoire.json engine/stockfish-19-lite-single.wasm assets/icons/apple-touch-icon.png; do
+            printf "%-45s " "$f"; curl -s -o /dev/null -w "%{http_code} %{content_type} %{size_download}\n" "$URL$f"; done
+          test "$(curl -s -o /dev/null -w '%{http_code}' "${URL}engine/stockfish-19-lite-single.wasm")" = 200
+  verify:
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Test the live site in a headless iPhone browser
+        working-directory: .github/verify
+        run: |
+          npm install --no-save --no-audit --no-fund playwright@1
+          npx playwright install --with-deps chromium
+          node live.cjs "${{ needs.deploy.outputs.page_url }}"
