@@ -29,7 +29,7 @@ const fails = []; const ok = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAI
   ok(n >= 74, 'precached files: ' + n);
 
   // sections
-  for (const r of ['today', 'canty', 'blitz', 'calculate', 'repertoire', 'vision', 'progress']) {
+  for (const r of ['today', 'train', 'canty', 'blitz', 'calculate', 'repertoire', 'vision', 'progress']) {
     await p.goto(base + '#/' + r); await p.waitForTimeout(1800);
     const t = await text(); ok(t.length > 80 && !/error/i.test(t.slice(0, 200)), 'section ' + r + ': ' + t.slice(0, 40).replace(/\n/g, ' '));
     ok(await hscroll() <= 0, 'no horizontal scroll on ' + r);

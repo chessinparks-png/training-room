@@ -27,11 +27,8 @@
   <div class="wrap">
     <a class="wordmark" href="#/today">Training <em>Room</em></a>
     <nav class="nav" aria-label="Sections">
-      <a href="#/today" data-nav="today" class="primary">Train Today</a>
-      <a href="#/canty" data-nav="canty">Canty</a>
-      <a href="#/blitz" data-nav="blitz">Blitz</a>
-      <a href="#/calculate" data-nav="calculate">Calculate</a>
-      <a href="#/repertoire" data-nav="repertoire">Repertoire</a>
+      <a href="#/today" data-nav="today">Train Today</a>
+      <a href="#/train" data-nav="train">Train</a>
       <a href="#/progress" data-nav="progress">Progress</a>
     </nav>
   </div>
@@ -40,6 +37,31 @@
   <div class="boot" id="boot"><p class="label">Opening the room</p><div class="meter" style="width:160px;margin-top:14px"><i style="width:30%"></i></div></div>
 </main>
 <noscript><p class="wrap">This training room needs JavaScript.</p></noscript>
-<script type="module" src="js/app.js"></script>
+<script>
+// Boot watchdog. Independent of the app's modules: if they fail to load or never finish starting,
+// replace "Opening the room" with a message and a way out instead of waiting forever.
+(function () {
+  function fail(why) {
+    if (window.__trReady || window.__trFailed) return; var b = document.getElementById('boot'); if (!b) return; window.__trFailed = true;
+    b.innerHTML = '<p class="label">The training room did not finish opening</p><p class="lede" style="margin-top:14px">' + String(why || 'Startup is taking too long.').replace(/[<>&]/g, '') + '</p>' +
+      '<div class="row" style="margin-top:22px;gap:22px"><button class="btn primary" onclick="location.reload()">Reload</button><button class="btn link" id="tr-repair">Clear app cache and reload</button></div>' +
+      '<p class="footnote" style="margin-top:18px">Clearing the app cache keeps your training history.</p>';
+    document.getElementById('tr-repair').onclick = function () {
+      var jobs = []; try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })); if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })); } catch (e) {}
+      Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
+    };
+  }
+  window.__trBootFail = fail;
+  window.addEventListener('error', function (e) { if (e && e.target && e.target.tagName === 'SCRIPT') fail('A part of the app could not be loaded (' + (e.target.src || 'script').split('/').pop() + ').'); }, true);
+  window.addEventListener('unhandledrejection', function (e) { var m = e && e.reason && (e.reason.message || e.reason); if (/import|module|fetch/i.test(String(m))) fail('A part of the app could not be loaded: ' + m); });
+  // the app bounds each of its own startup stages; this catches everything else (modules that never load)
+  function check() {
+    if (window.__trBooting && !window.__trLate) { window.__trLate = true; setTimeout(check, 15000); return; } // app is running: give its own timeouts room
+    fail(navigator.onLine === false ? 'You are offline and part of the app is not cached yet.' : 'Startup is taking too long' + (window.__trStage ? ' (stuck ' + window.__trStage + ')' : '') + ' — usually a stalled network request or an old cached copy of the app.');
+  }
+  setTimeout(check, 12000);
+})();
+</script>
+<script type="module" src="js/app.js" onerror="window.__trBootFail && window.__trBootFail('The app code could not be loaded.')"></script>
 </body>
 </html>

@@ -16,12 +16,13 @@ function open() {
       if (!d.objectStoreNames.contains('engine')) d.createObjectStore('engine');
       if (!d.objectStoreNames.contains('games')) d.createObjectStore('games', { keyPath: 'id' });
     };
-    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+    rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); rq.onblocked = () => rej(new Error('Storage is blocked by another open copy of the app'));
+    setTimeout(() => rej(new Error('Storage did not open')), 4000); // some WebKit builds never answer
   });
 }
 export async function initStore() {
   try { if (!('indexedDB' in globalThis)) throw 0; db = await open(); }
-  catch (e) { mem = {}; for (const s of STORES) mem[s] = new Map(); try { const raw = localStorage.getItem('training-room.fallback'); if (raw) { const o = JSON.parse(raw); for (const s of STORES) mem[s] = new Map(o[s] || []); } } catch (x) {} }
+  catch (e) { if (e) console.warn('IndexedDB unavailable, using local fallback:', e.message || e); db = null; mem = {}; for (const s of STORES) mem[s] = new Map(); try { const raw = localStorage.getItem('training-room.fallback'); if (raw) { const o = JSON.parse(raw); for (const s of STORES) mem[s] = new Map(o[s] || []); } } catch (x) {} }
   return !!db;
 }
 const persistMem = () => { try { const o = {}; for (const s of STORES) o[s] = s === 'engine' ? [] : [...mem[s]]; localStorage.setItem('training-room.fallback', JSON.stringify(o)); } catch (e) {} };

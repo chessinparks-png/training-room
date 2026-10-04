@@ -4,7 +4,7 @@ import * as store from '../data/store.js';
 import { nextRepair, mountRepairItem, TACTICAL } from '../training/repair.js';
 import { mountCalc } from '../training/calc.js';
 import { cantyQueue, runCanty, clockQueue, mountClock } from '../training/canty.js';
-import { esc } from '../ui.js';
+import { esc, toast } from '../ui.js';
 
 const KINDS = ['recog', 'canty', 'clock', 'calc', 'review'];
 
@@ -12,7 +12,7 @@ export async function mount(el, params) {
   let un = null; const cleanup = () => { if (typeof un === 'function') un(); un = null; };
   const saved = await store.setting('session.current', null);
   // sessions saved by the previous version of the app have other step kinds: start fresh
-  const valid = saved && saved.session.steps.every(s => KINDS.includes(s.kind)) ? saved : null;
+  const valid = saved && saved.session && Array.isArray(saved.session.steps) && Array.isArray(saved.results) && saved.session.steps.every(s => s && KINDS.includes(s.kind)) ? saved : null;
   if (params[0] === 'run' && valid) { run(el, valid, f => { un = f; }); return cleanup; }
   const plan = valid && Date.now() - valid.session.created < 12 * 3600e3 ? valid.session : await buildSession();
   home(el, plan, !!valid && valid.index > 0 && valid.session.id === plan.id);
@@ -47,6 +47,10 @@ async function run(el, cur, setUn) {
     const i = cur.index; if (i >= session.steps.length) return finish();
     const s = session.steps[i]; const results = { step: s.kind, items: [] };
     const done = async () => { cur.results.push(results); cur.index++; await save(); step(); };
+    try { await runStep(i, s, results, done); }
+    catch (e) { console.error(e); toast(`${s.label} could not load — skipped. (${e.message})`, 5000); done(); }
+  }
+  async function runStep(i, s, results, done) {
     if (s.kind === 'recog') series(i, await nextRepair(s.n, { fresh: s.n, skipDue: true, types: TACTICAL }), (h, it, next) => mountRepairItem(h, it, { onDone: next, label: 'RECOGNITION · FIND IT FAST' }), results, done);
     else if (s.kind === 'review') series(i, await nextRepair(s.n, { fresh: 0 }), (h, it, next) => mountRepairItem(h, it, { onDone: next }), results, done);
     else if (s.kind === 'calc') series(i, stepItems(s), (h, it, next) => mountCalc(h, it, { level: s.level, onDone: next }), results, done);
