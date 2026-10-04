@@ -39,29 +39,74 @@
 <noscript><p class="wrap">This training room needs JavaScript.</p></noscript>
 <script>
 // Boot watchdog. Independent of the app's modules: if they fail to load or never finish starting,
-// replace "Opening the room" with a message and a way out instead of waiting forever.
+// replace "Opening the room" with the first concrete failure and a way out instead of waiting forever.
 (function () {
-  function fail(why) {
-    if (window.__trReady || window.__trFailed) return; var b = document.getElementById('boot'); if (!b) return; window.__trFailed = true;
-    b.innerHTML = '<p class="label">The training room did not finish opening</p><p class="lede" style="margin-top:14px">' + String(why || 'Startup is taking too long.').replace(/[<>&]/g, '') + '</p>' +
-      '<div class="row" style="margin-top:22px;gap:22px"><button class="btn primary" onclick="location.reload()">Reload</button><button class="btn link" id="tr-repair">Clear app cache and reload</button></div>' +
-      '<p class="footnote" style="margin-top:18px">Clearing the app cache keeps your training history.</p>';
-    document.getElementById('tr-repair').onclick = function () {
-      var jobs = []; try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })); if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })); } catch (e) {}
-      Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
-    };
+  var esc = function (t) { return String(t).replace(/[<>&]/g, function (c) { return { '<': '&lt;', '>': '&gt;', '&': '&amp;' }[c]; }); };
+  var rel = function (u) { try { var x = new URL(u, location.href); return x.protocol === 'file:' ? x.pathname.split('/').slice(-2).join('/') : x.pathname.replace(new URL('.', location.href).pathname, ''); } catch (e) { return String(u); } };
+  function fail(why, detail) {
+    if (window.__trReady) return; var b = document.getElementById('boot'); if (!b) return;
+    if (!window.__trFailed) {
+      window.__trFailed = true;
+      b.innerHTML = '<p class="label">The training room did not finish opening</p><p class="lede" style="margin-top:14px" id="tr-why"></p><pre id="tr-detail" style="margin-top:14px;white-space:pre-wrap;font:400 12.5px/1.6 var(--sans);color:var(--error)"></pre>' +
+        '<div class="row" style="margin-top:22px;gap:22px"><button class="btn primary" onclick="location.reload()">Reload</button><button class="btn link" id="tr-repair">Clear app cache and reload</button></div>' +
+        '<p class="footnote" style="margin-top:18px">Clearing the app cache keeps your training history.</p>';
+      document.getElementById('tr-repair').onclick = function () {
+        var jobs = []; try { if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); })); if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); })); } catch (e) {}
+        Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
+      };
+    }
+    if (why) document.getElementById('tr-why').textContent = why;
+    if (detail) { document.getElementById('tr-detail').innerHTML = esc(detail); console.error('[boot] ' + detail); }
   }
-  window.__trBootFail = fail;
-  window.addEventListener('error', function (e) { if (e && e.target && e.target.tagName === 'SCRIPT') fail('A part of the app could not be loaded (' + (e.target.src || 'script').split('/').pop() + ').'); }, true);
-  window.addEventListener('unhandledrejection', function (e) { var m = e && e.reason && (e.reason.message || e.reason); if (/import|module|fetch/i.test(String(m))) fail('A part of the app could not be loaded: ' + m); });
+  window.__trBootFail = function (why) { fail(why); diagnose('js/app.js'); };
+
+  // Finds the first module in the static import chain that cannot be fetched or evaluated.
+  var diagnosing = false;
+  function diagnose(entry) {
+    if (diagnosing) return; diagnosing = true;
+    if (location.protocol === 'file:') { fail('This page was opened as a file.', 'FAILED: ' + rel(entry) + '\nOpened from file:// — browsers block JavaScript modules loaded from local files.\nStart the local server instead: run  node serve.mjs  in the app folder, then open http://localhost:8765/'); return; }
+    var seen = {}, order = [], queue = [new URL(entry, location.href).href];
+    var sw = navigator.serviceWorker && navigator.serviceWorker.controller ? ' (answered by the service worker)' : '';
+    (function next() {
+      if (!queue.length) return evaluate();
+      var url = queue.shift(); if (seen[url]) return next(); seen[url] = 1; order.push(url);
+      fetch(url, { cache: 'no-store' }).then(function (r) {
+        var ct = r.headers.get('content-type') || '(none)';
+        if (!r.ok) throw 'FAILED: ' + rel(url) + '\n' + r.status + ' ' + (r.statusText || '') + sw;
+        return r.text().then(function (t) {
+          if (/^\s*</.test(t)) throw 'FAILED: ' + rel(url) + '\nReturned HTML instead of JavaScript (content-type ' + ct + ')' + sw;
+          if (!/javascript|ecmascript/i.test(ct)) throw 'FAILED: ' + rel(url) + '\nServed as "' + ct + '" — module scripts must be served as JavaScript (text/javascript)' + sw;
+          var re = /(?:^|[\s;}])(?:import|export)\s*(?:[\w*{}\s,$]+?\s*from\s*)?['"](\.{1,2}\/[^'"]+)['"]/g, m;
+          while ((m = re.exec(t))) queue.push(new URL(m[1], url).href);
+          next();
+        });
+      }).catch(function (e) { fail(null, typeof e === 'string' ? e : 'FAILED: ' + rel(url) + '\n' + (e && e.message || e) + sw); });
+    })();
+    // Every file downloaded: evaluate dependencies leaf-first so a syntax/export error names its file.
+    function evaluate() {
+      var deps = order.slice(1).reverse(), i = 0;
+      (function step() {
+        if (i >= deps.length) return fail(null, 'All ' + order.length + ' modules in the startup chain downloaded and evaluated individually.\nThe failure is in ' + rel(order[0]) + ' itself (see the browser console).');
+        var u = deps[i++]; import(u).then(step, function (e) { fail(null, 'FAILED: ' + rel(u) + '\n' + (e && e.name ? e.name + ': ' : '') + (e && e.message || e)); });
+      })();
+    }
+  }
+  // Syntax / missing-export / runtime errors during startup carry the file and line.
+  window.addEventListener('error', function (e) {
+    if (window.__trReady) return;
+    if (e && e.filename && e.message) { fail('Startup failed with an error.', 'FAILED: ' + rel(e.filename) + (e.lineno ? ' line ' + e.lineno : '') + '\n' + e.message); diagnosing = true; return; }
+    if (e && e.target && e.target.tagName === 'SCRIPT') { fail('A part of the app could not be loaded.'); diagnose(e.target.src || 'js/app.js'); }
+  }, true);
+  window.addEventListener('unhandledrejection', function (e) { var m = e && e.reason && (e.reason.message || e.reason); if (/import|module|fetch/i.test(String(m))) fail('A part of the app could not be loaded.', String(m)); });
   // the app bounds each of its own startup stages; this catches everything else (modules that never load)
   function check() {
     if (window.__trBooting && !window.__trLate) { window.__trLate = true; setTimeout(check, 15000); return; } // app is running: give its own timeouts room
     fail(navigator.onLine === false ? 'You are offline and part of the app is not cached yet.' : 'Startup is taking too long' + (window.__trStage ? ' (stuck ' + window.__trStage + ')' : '') + ' — usually a stalled network request or an old cached copy of the app.');
+    if (!window.__trBooting) diagnose('js/app.js');
   }
   setTimeout(check, 12000);
 })();
 </script>
-<script type="module" src="js/app.js" onerror="window.__trBootFail && window.__trBootFail('The app code could not be loaded.')"></script>
+<script type="module" src="js/app.js" onerror="window.__trBootFail && window.__trBootFail('A part of the app could not be loaded.')"></script>
 </body>
 </html>
