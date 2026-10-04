@@ -19,7 +19,7 @@ const ROUTES = {
 const TRAIN = [['canty', 'Canty Repertoire'], ['blitz', 'Blitz'], ['calculate', 'Calculate'], ['vision', 'Vision']];
 const IN_TRAIN = new Set([...TRAIN.map(t => t[0]), 'repertoire']);
 const lastTrain = () => { try { const v = localStorage.getItem('tr.train'); return TRAIN.some(t => t[0] === v) ? v : 'canty'; } catch (e) { return 'canty'; } };
-let unmount = null; let token = 0;
+let unmount = null; let token = 0; let routeOk = false;
 
 async function route() {
   const hash = location.hash.replace(/^#\/?/, '') || 'today';
@@ -33,13 +33,14 @@ async function route() {
   if (unmount) { try { unmount(); } catch (e) { console.warn(e); } unmount = null; }
   onKeys(null);
   const main = $('#main');
+  routeOk = false;
   let mod; try { mod = await withTimeout(load(), 15000, 'loading this screen'); }
   catch (e) { console.error(e); if (my === token) main.innerHTML = problem('This screen could not be loaded', e); return; }
   if (my !== token) return;
   main.innerHTML = ''; if (bootIssues.length) main.insertAdjacentHTML('beforeend', `<p class="boot-note">${esc(bootIssues.join(' · '))} <a href="#" onclick="location.reload();return false">Reload</a></p>`);
   if (top === 'train') main.insertAdjacentHTML('beforeend', `<nav class="subnav" aria-label="Trainers">${TRAIN.map(([id, label]) => `<a href="#/${id}"${id === name ? ' aria-current="page"' : ''}>${label}</a>`).join('')}</nav>`);
   const el = document.createElement('div'); el.className = 'view'; main.appendChild(el);
-  try { unmount = (await mod.mount(el, params.map(decodeURIComponent))) || null; }
+  try { unmount = (await mod.mount(el, params.map(decodeURIComponent))) || null; routeOk = my === token; }
   catch (e) { console.error(e); el.innerHTML = problem('Something went wrong', e); }
   window.scrollTo(0, 0);
 }
@@ -64,6 +65,8 @@ async function boot() {
   window.addEventListener('hashchange', route);
   await route();
   window.__trReady = true;
+  // Grounding moment: only after a successful start, loaded on demand, never required.
+  if (routeOk && !bootIssues.length) import('./grounding.js').then(m => m.show()).catch(e => console.warn('grounding skipped', e));
   if ('serviceWorker' in navigator && location.protocol.startsWith('http')) navigator.serviceWorker.register('sw.js').catch(() => {});
 }
 boot().catch(e => { console.error(e); window.__trReady = true; $('#main').innerHTML = problem('Could not open the training room', e); });

@@ -1,5 +1,5 @@
 {
- "version": "2026-10-04-boot-fix",
+ "version": "2026-10-04-grounding",
  "files": [
   "./",
   "index.html",
@@ -77,6 +77,7 @@
   "engine/stockfish-19-lite-single.wasm",
   "js/training/canty.js",
   "js/views/canty.js",
-  "data/canty.json"
+  "data/canty.json",
+  "js/grounding.js"
  ]
 }
