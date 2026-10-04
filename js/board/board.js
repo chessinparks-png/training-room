@@ -144,6 +144,7 @@ export class Board {
   }
   key(e) {
     const k = e.key; if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter', ' ', 'Escape'].includes(k)) return;
+    if ((k === 'Enter' || k === ' ') && !this.o.movable && !this.o.onSquare) return; // let the page use it (Next)
     e.preventDefault();
     if (k === 'Escape') { this.sel = -1; this.cursor = -1; this.paint(); return; }
     const ord = this.order(); let i = this.cursor < 0 ? ord.indexOf(this.sel >= 0 ? this.sel : ord[52]) : ord.indexOf(this.cursor);

@@ -38,3 +38,4 @@ export function decisions(fam) { return C.training.decisions.filter(d => (!fam |
 export function plans(fam) { return C.training.plans.filter(d => (!fam || d.fam === fam) && Math.abs(d.sfCp ?? 0) < PLAYABLE.plan); }
 export function calcItems(filter = {}) { return C.training.calc.filter(c => (!filter.fam || c.fam === filter.fam) && (!filter.kind || c.kind === filter.kind) && (!filter.src || c.src === filter.src)); }
 export function drills() { return C.training.drills; }
+export const canty = () => load('canty.json');

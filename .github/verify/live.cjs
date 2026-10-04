@@ -28,8 +28,8 @@ const fails = []; const ok = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAI
   let n = 0; for (let i = 0; i < 80; i++) { n = await p.evaluate(async () => { const k = (await caches.keys()).filter(x => x.startsWith('training-room-')); return k.length ? (await (await caches.open(k[k.length - 1])).keys()).length : 0; }); if (n >= 74) break; await p.waitForTimeout(500); }
   ok(n >= 74, 'precached files: ' + n);
 
-  // six sections
-  for (const r of ['today', 'blitz', 'calculate', 'repertoire', 'vision', 'progress']) {
+  // sections
+  for (const r of ['today', 'canty', 'blitz', 'calculate', 'repertoire', 'vision', 'progress']) {
     await p.goto(base + '#/' + r); await p.waitForTimeout(1800);
     const t = await text(); ok(t.length > 80 && !/error/i.test(t.slice(0, 200)), 'section ' + r + ': ' + t.slice(0, 40).replace(/\n/g, ' '));
     ok(await hscroll() <= 0, 'no horizontal scroll on ' + r);

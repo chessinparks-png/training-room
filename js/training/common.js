@@ -5,7 +5,7 @@ import { esc } from '../ui.js';
 import { FAMILY, MODEL } from '../repertoire/families.js';
 
 export function stage(el, { label = '' } = {}) {
-  el.innerHTML = `<div class="stage"><div class="board-col"><div class="board-host"></div><div class="under-board"><span class="context-line"></span><span class="label under-right"></span></div></div><div class="side"><div class="label ink stage-label">${esc(label)}</div><div class="side-body stack" style="--s:22px"></div></div></div>`;
+  el.innerHTML = `<div class="stage"><div class="board-col"><div class="board-host"></div><div class="under-board"><span class="context-line"></span><span class="label under-right"></span></div></div><div class="side"><div class="label ink stage-label">${esc(label)}</div><div class="side-body stack" style="--s:16px"></div></div></div>`;
   return { boardHost: el.querySelector('.board-host'), side: el.querySelector('.side-body'), labelEl: el.querySelector('.stage-label'), context: el.querySelector('.context-line'), underRight: el.querySelector('.under-right') };
 }
 export function makeBoard(host, fen, opts = {}) { const b = new Board(host, opts); b.setPosition(new Pos(fen), { animate: false }); return b; }

@@ -61,7 +61,7 @@ export function mountDecision(el, it, { onDone, repairId, label } = {}) {
         <div><h4>Your move</h4><p class="small">${sound ? `Objectively reasonable (${MOVE_LABEL[q.label].toLowerCase()}${q.loss ? ', −' + q.loss + '% win chance vs best' : ''}).` : `Stockfish's refutation line starts ${esc(best ? best.pv.slice(0, 4).join(' ') : '')}.`}${matched ? '' : ` ${esc(M)}'s game continued ${line(it.cont ? it.cont.slice(0, 6) : [it.modelMove], plyFromFen(fen))}.`}</p></div>
       </div>
       <p class="footnote">${it.link ? `Source: <a href="${esc(it.link)}" target="_blank" rel="noopener">${esc(M)} vs ${esc(it.opp || '')}</a>, move ${Math.floor(it.ply / 2) + 1}.` : `Source: ${it.modelN} ${esc(M)} games reaching this exact position (transpositions included).`}</p>
-      <div class="actions"><button class="btn link" data-a="line">Play model line</button><button class="btn link" data-a="sf">Stockfish line</button><button class="btn link" data-a="repair">Repair this position</button><button class="btn primary" data-a="next">Next</button></div>`;
+      <div class="actions"><button class="btn primary" data-a="next">Next</button><button class="btn link" data-a="line">Play model line</button><button class="btn link" data-a="sf">Stockfish line</button><button class="btn link" data-a="repair">Repair this position</button></div>`;
     const ok = sound; const rec = { ok, matched, sec: secs, quality: q.label, loss: q.loss };
     await store.logAttempt({ mode: 'decision', id: it.id, fam: it.fam, player: it.player, ok, matched, sec: secs, quality: q.label, pattern: it.pattern || null, both: !!it.both });
     if (repairId) await srs.grade(repairId, ok);

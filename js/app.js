@@ -8,6 +8,7 @@ import { seedRepair } from './training/repair.js';
 
 const ROUTES = {
   today: () => import('./views/today.js'),
+  canty: () => import('./views/canty.js'),
   blitz: () => import('./views/blitz.js'),
   calculate: () => import('./views/calculate.js'),
   repertoire: () => import('./views/repertoire.js'),
@@ -29,7 +30,7 @@ async function route() {
   const main = $('#main'); main.innerHTML = ''; const el = document.createElement('div'); el.className = 'view'; main.appendChild(el);
   try { unmount = (await mod.mount(el, params.map(decodeURIComponent))) || null; }
   catch (e) { console.error(e); el.innerHTML = `<p class="label">Something went wrong</p><p class="lede">${esc(e.message)}</p>`; }
-  if (!location.hash.includes('/', 2)) window.scrollTo(0, 0);
+  window.scrollTo(0, 0);
 }
 
 async function boot() {

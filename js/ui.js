@@ -32,7 +32,12 @@ export function weighted(items, w) { const tot = items.reduce((s, x) => s + w(x)
 // Keyboard shortcut scope for the active view
 let keyHandler = null;
 export function onKeys(fn) { keyHandler = fn; }
-if (typeof document !== 'undefined') document.addEventListener('keydown', e => { if (!keyHandler || /input|textarea|select/i.test(e.target.tagName)) return; keyHandler(e); });
+if (typeof document !== 'undefined') document.addEventListener('keydown', e => {
+  if (/input|textarea|select/i.test(e.target.tagName)) return;
+  // Enter / Space moves on from any answered training position
+  if ((e.key === 'Enter' || e.key === ' ') && !e.defaultPrevented && !e.repeat) { const nx = document.querySelector('#main [data-a="next"]:not(:disabled)'); if (nx && !(e.target.closest && e.target.closest('button, a'))) { e.preventDefault(); nx.click(); return; } }
+  if (keyHandler) keyHandler(e);
+});
 
 // A tiny timer display bound to an element
 export function stopwatch(el) {

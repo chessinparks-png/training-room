@@ -14,16 +14,18 @@ export async function seedRepair() {
   const v = await store.setting('repair.seeded', 0); if (v) return; await store.setSetting('repair.seeded', 1);
 }
 const TARGET = new Set(['jobava', 'kid', 'oldindian', 'pirc']);
-function freshDrills(existing, fam) {
-  return C.training.drills.filter(d => d.verdict !== 'not-a-mistake' && !existing.has('move:' + d.id) && (!fam || d.fam === fam))
+export const TACTICAL = ['missed-win', 'allowed-tactic', 'allowed-mate'];
+function freshDrills(existing, fam, types) {
+  return C.training.drills.filter(d => d.verdict !== 'not-a-mistake' && !existing.has('move:' + d.id) && (!fam || d.fam === fam) && (!types || types.includes(d.type)))
     .sort((a, b) => (TARGET.has(b.fam) - TARGET.has(a.fam)) || (b.n * b.loss) - (a.n * a.loss));
 }
 // Returns repair items to work on: due first, then up to `fresh` newly introduced ones.
-export async function nextRepair(count = 4, { fam = null, fresh = 2 } = {}) {
+// skipDue: only introduce new positions (fast recognition); types: limit new ones to drill types.
+export async function nextRepair(count = 4, { fam = null, fresh = 2, skipDue = false, types = null } = {}) {
   const all = await srs.items(); const existing = new Set(all.map(r => r.id)); const now = Date.now();
-  const due = all.filter(r => r.due <= now && (!fam || r.fam === fam)).sort((a, b) => a.box - b.box || a.due - b.due);
+  const due = skipDue ? [] : all.filter(r => r.due <= now && (!fam || r.fam === fam)).sort((a, b) => a.box - b.box || a.due - b.due);
   const out = due.slice(0, count);
-  if (out.length < count) for (const d of freshDrills(existing, fam).slice(0, Math.min(fresh, count - out.length))) {
+  if (out.length < count) for (const d of freshDrills(existing, fam, types).slice(0, Math.min(fresh, count - out.length))) {
     const it = srs.newItem({ id: 'move:' + d.id, kind: 'move', ref: d.id, fam: d.fam, reason: `A position from your games${d.n > 1 ? ` — you went wrong here ${d.n} times` : ' where you went wrong'}.`, source: 'my games' });
     await srs.add(it); out.push(it);
   }
@@ -46,12 +48,14 @@ export function mountMoveRepair(el, item, { onDone, label } = {}) {
     <div class="actions"><button class="btn quiet" data-a="hint">Hint</button><button class="btn quiet" data-a="show">Show answer</button></div><div class="fb"></div>`;
   const sw = stopwatch(S.side.querySelector('.timer'));
   S.side.addEventListener('click', e => { const a = e.target.closest('[data-a]'); if (!a) return; act(a.dataset.a); });
+  let busy = false;
   async function answer(mv) {
-    if (done) return; tries++;
+    if (done || busy) return; tries++; busy = true;
+    const p2 = new Pos(fen); p2.make(mv.m); board.setPosition(p2, { last: [mFrom(mv.m), mTo(mv.m)] });
     const good = (d.good || [d.sfBest || d.best]).some(g => sameMove(g, mv.san));
     let ok = good, cp = null;
     if (!ok && !sameMove(mv.san, d.played)) { cp = await evalAfter(fen, mv.uci, { budget: 'fast', priority: 'high' }); if (cp != null && d.cpBest != null && winPct(d.cpBest) - winPct(cp) <= 4) ok = true; }
-    const p2 = new Pos(fen); p2.make(mv.m); board.setPosition(p2, { last: [mFrom(mv.m), mTo(mv.m)] });
+    busy = false;
     if (!ok && tries < 2 && !sameMove(mv.san, d.played)) {
       S.side.querySelector('.fb').innerHTML = `<p class="verdict">${esc(mv.san)} is not it.</p><p class="ink2 small">${d.type === 'missed-win' ? 'There is more here — look for forcing moves.' : /allowed/.test(d.type || '') ? 'First ask what your opponent threatens.' : 'Look for the move that improves your worst piece or fights for the centre.'} One more try.</p>`;
       setTimeout(() => { if (!done) board.setPosition(new Pos(fen), { animate: true }); }, 650); return;
@@ -76,7 +80,7 @@ export function mountMoveRepair(el, item, { onDone, label } = {}) {
       <div><h4>The better line</h4><p class="small">${line(d.pvBest || [best], plyFromFen(fen))}</p></div>
       ${d.verdict === 'inaccuracy' ? `<div><p class="small muted">Stockfish rates your game move an inaccuracy (−${d.loss}% win chance), not a blunder.</p></div>` : ''}</div>
       <p class="footnote">${r ? `Next review ${r.box >= 4 ? 'in ' + [0, 1, 3, 7, 16, 35][r.box] + ' days · mastered' : r.box ? 'in ' + [0, 1, 3, 7, 16, 35][r.box] + ' day' + (r.box > 1 ? 's' : '') : 'soon — it comes back this session window'}.` : ''} ${d.games && d.games.length ? `Source: <a href="https://www.chess.com/game/live/${esc(d.games[0])}" target="_blank" rel="noopener">your game</a>${d.games.length > 1 ? ` + ${d.games.length - 1} more` : ''}.` : ''}</p>
-      <div class="actions"><button class="btn link" data-a="best">Play the better line</button>${d.pvRef ? `<button class="btn link" data-a="ref">Why it fails</button>` : ''}<button class="btn primary" data-a="next">Next</button></div>`;
+      <div class="actions"><button class="btn primary" data-a="next">Next</button><button class="btn link" data-a="best">Better line</button>${d.pvRef ? `<button class="btn link" data-a="ref">Why it fails</button>` : ''}</div>`;
     finish.result = { ok: firstTry, sec: secs, kind: 'repair' };
   }
   function act(a) {

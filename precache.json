@@ -1,5 +1,5 @@
 {
- "version": "mulimmlm",
+ "version": "canty111dba",
  "files": [
   "./",
   "index.html",
@@ -74,6 +74,9 @@
   "assets/pieces/maestro/wQ.svg",
   "assets/pieces/maestro/wR.svg",
   "engine/stockfish-19-lite-single.js",
-  "engine/stockfish-19-lite-single.wasm"
+  "engine/stockfish-19-lite-single.wasm",
+  "js/training/canty.js",
+  "js/views/canty.js",
+  "data/canty.json"
  ]
 }
