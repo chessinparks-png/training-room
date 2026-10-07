@@ -35,6 +35,7 @@ export async function initCatalog() {
 export const modelGames = () => load('games-model.json').then(gs => gs.concat(C.imported.filter(g => g.kind === 'model')));
 export const book = () => load('book.json');
 export const technique = () => load('technique.json');
+export const courses = () => load('courses.json');
 export const legacy = () => load('legacy/drill-room-data.json');
 export function myGames() { const byId = new Map(C.mine.map(g => [g.id, g])); for (const g of C.imported.filter(x => x.kind === 'mine')) byId.set(g.id, g); return [...byId.values()]; }
 

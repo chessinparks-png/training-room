@@ -21,9 +21,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # Publish only what the app needs at runtime: never raw/ (source PGNs) or other build inputs
+      - name: Assemble site without build sources
+        run: |
+          mkdir -p "$RUNNER_TEMP/site"
+          tar --exclude=./.git --exclude=./.github --exclude=./raw --exclude=./tools --exclude='*.pgn' -cf - . | tar -xf - -C "$RUNNER_TEMP/site"
+          test ! -e "$RUNNER_TEMP/site/raw" && ! find "$RUNNER_TEMP/site" -name '*.pgn' | grep -q .
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: .
+          path: ${{ runner.temp }}/site
       - id: deployment
         uses: actions/deploy-pages@v4
       - name: Verify the live site
@@ -34,6 +40,7 @@ jobs:
           for f in "" index.html manifest.webmanifest sw.js precache.json js/app.js data/training.json data/repertoire.json engine/stockfish-19-lite-single.wasm assets/icons/apple-touch-icon.png; do
             printf "%-45s " "$f"; curl -s -o /dev/null -w "%{http_code} %{content_type} %{size_download}\n" "$URL$f"; done
           test "$(curl -s -o /dev/null -w '%{http_code}' "${URL}engine/stockfish-19-lite-single.wasm")" = 200
+          test "$(curl -s -o /dev/null -w '%{http_code}' "${URL}raw/games/GAMES1111.pgn")" = 404
   verify:
     needs: deploy
     runs-on: ubuntu-latest

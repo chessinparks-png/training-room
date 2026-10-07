@@ -1,4 +1,4 @@
-// Builds data/canty.json from data/source/canty-white.pgn: Canty's recurring decision points in
+// Builds data/canty.json from raw/models/canty-white.pgn: Canty's recurring decision points in
 // 1.d4 / 2.Nc3 systems (repertoire trainer) and a small set of 3+2 clock-decision positions.
 // Positions are curated by (game, White move number) and checked against the actual game move.
 // Usage: node tools/build-canty.mjs
@@ -7,7 +7,7 @@ import { splitGames, parseHeaders, movetextTokens } from '../js/data/pgn.js';
 import { Pos } from '../js/chess/core.js';
 
 const ROOT = new URL('..', import.meta.url).pathname;
-const games = [...splitGames(fs.readFileSync(ROOT + 'data/source/canty-white.pgn', 'utf8'))].map(raw => {
+const games = [...splitGames(fs.readFileSync(ROOT + 'raw/models/canty-white.pgn', 'utf8'))].map(raw => {
   const h = parseHeaders(raw); return { h, sans: movetextTokens(raw).sans };
 });
 

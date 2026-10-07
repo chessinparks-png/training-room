@@ -1,5 +1,5 @@
 {
- "version": "2026-10-07-technique",
+ "version": "2026-10-07-repertoire",
  "files": [
   "./",
   "index.html",
@@ -80,6 +80,8 @@
   "data/canty.json",
   "js/grounding.js",
   "js/views/technique.js",
-  "data/technique.json"
+  "data/technique.json",
+  "js/views/courses.js",
+  "data/courses.json"
  ]
 }
