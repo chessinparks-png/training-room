@@ -9,6 +9,7 @@ import { seedRepair } from './training/repair.js';
 const ROUTES = {
   today: () => import('./views/today.js'),
   canty: () => import('./views/canty.js'),
+  technique: () => import('./views/technique.js'),
   blitz: () => import('./views/blitz.js'),
   calculate: () => import('./views/calculate.js'),
   repertoire: () => import('./views/repertoire.js'),
@@ -16,7 +17,7 @@ const ROUTES = {
   progress: () => import('./views/progress.js'),
 };
 // TRAIN groups the individual trainers behind one tab with a quiet secondary selector.
-const TRAIN = [['canty', 'Canty Repertoire'], ['blitz', 'Blitz'], ['calculate', 'Calculate'], ['vision', 'Vision']];
+const TRAIN = [['canty', 'Canty Repertoire'], ['technique', 'Technique'], ['blitz', 'Blitz'], ['calculate', 'Calculate'], ['vision', 'Vision']];
 const IN_TRAIN = new Set([...TRAIN.map(t => t[0]), 'repertoire']);
 const lastTrain = () => { try { const v = localStorage.getItem('tr.train'); return TRAIN.some(t => t[0] === v) ? v : 'canty'; } catch (e) { return 'canty'; } };
 let unmount = null; let token = 0; let routeOk = false;

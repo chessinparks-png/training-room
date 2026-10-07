@@ -1,5 +1,5 @@
 {
- "version": "2026-10-04-boot-diag",
+ "version": "2026-10-07-technique",
  "files": [
   "./",
   "index.html",
@@ -78,6 +78,8 @@
   "js/training/canty.js",
   "js/views/canty.js",
   "data/canty.json",
-  "js/grounding.js"
+  "js/grounding.js",
+  "js/views/technique.js",
+  "data/technique.json"
  ]
 }

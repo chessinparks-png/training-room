@@ -8,6 +8,7 @@
 import fs from 'fs'; import path from 'path'; import { spawn } from 'child_process';
 import { splitGames, parseHeaders, movetextTokens, normalizeMoves, chesscomId } from '../js/data/pgn.js';
 import { Pos, BL, mFrom, mTo } from '../js/chess/core.js';
+import { winPct } from '../js/analysis/quality.js';
 
 const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
 const ME = 'localchessexpert';
@@ -191,8 +192,8 @@ function passed(p, s) { const x = p.b[s]; if (!x || TYPE(x) !== 'p') return fals
 function moveInfo(fen, uci) { const p = new Pos(fen); const m = uci && p.fromUci(uci); if (!m) return null; const from = mFrom(m), to = mTo(m); const t = TYPE(p.b[from]); const cap = p.b[to] ? TYPE(p.b[to]) : null; const pass = t === 'p' && passed(p, from); const san = p.san(m); p.make(m); return { t, cap, pass, san, check: p.inCheck(), from, to, white: fen.split(' ')[1] === 'w' }; }
 // material swing (in pawns, from the side to move) along a line: ±2 or more inside 6 plies = a tactic, not technique
 const VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
-function swing(fen, pv, n = 6) { const p = new Pos(fen); const me = p.turn; const bal = () => { let x = 0; for (let s = 0; s < 128; s++) { if (s & 0x88) { s += 7; continue; } const y = p.b[s]; if (y) x += ((y & BL ? 1 : 0) === me ? 1 : -1) * VAL[TYPE(y)]; } return x; };
-  const b0 = bal(); let lo = 0, hi = 0; for (const u of pv.slice(0, n)) { const m = p.fromUci(u); if (!m) break; p.make(m); if (p.turn === me) { const d = bal() - b0; lo = Math.min(lo, d); hi = Math.max(hi, d); } } const d = bal() - b0; return { lo: Math.min(lo, d), hi: Math.max(hi, d) }; }
+function swing(fen, pv, n = 6) { const p = new Pos(fen); const me = p.side(); const bal = () => { let x = 0; for (let s = 0; s < 128; s++) { if (s & 0x88) { s += 7; continue; } const y = p.b[s]; if (y) x += ((y & BL ? 'b' : 'w') === me ? 1 : -1) * VAL[TYPE(y)]; } return x; };
+  const b0 = bal(); let lo = 0, hi = 0; for (const u of pv.slice(0, n)) { const m = p.fromUci(u); if (!m) break; p.make(m); if (p.side() === me) { const d = bal() - b0; lo = Math.min(lo, d); hi = Math.max(hi, d); } } const d = bal() - b0; return { lo: Math.min(lo, d), hi: Math.max(hi, d) }; }
 const activeRook = mi => mi && mi.t === 'r' && !mi.cap && (mi.check || (mi.white ? sq(mi.to).r >= 4 : sq(mi.to).r <= 3));
 const backRank = mi => mi && mi.t === 'r' && !mi.check && (mi.white ? sq(mi.to).r < sq(mi.from).r : sq(mi.to).r > sq(mi.from).r); // a retreat
 export function analyse(kind, c, r) {
@@ -286,12 +287,85 @@ function report() {
   fs.writeFileSync(path.join(CACHE, 'selected.json'), JSON.stringify(Object.fromEntries(Object.entries(sel).map(([k, v]) => [k, v.filter(x => x.hq).map(({ g, ...x }) => ({ ...x, link: g.link, opp: g.opp, date: g.date, color: g.color }))]))));
 }
 
+// ---------- Stage 6: build data/technique.json ----------
+const LABEL = { queens: 'Trade queens', rooks: 'Trade rooks', minors: 'Trade the minor pieces' };
+const GAINS = ['Reduce counterplay', 'Activate my king', 'Reach a favorable pawn ending', 'Improve my rook', 'Remove a defender', 'Keep attacking chances'];
+const myMaterial = fen => { const p = new Pos(fen); const me = p.side(); let x = 0; for (let s = 0; s < 128; s++) { if (s & 0x88) { s += 7; continue; } const y = p.b[s]; if (y) x += ((y & BL ? 'b' : 'w') === me ? 1 : -1) * VAL[TYPE(y)]; } return x; };
+const fen4 = f => f.split(' ').slice(0, 4).join(' ');
+function context(g, ply) { const from = Math.max(0, ply - 6); return { prev: g.moves.slice(from, ply), prevPly: from }; }
+function build() {
+  const sel = select(); const D = readJson(DEEP, {}); const used = new Set(); const pick = (x, extra) => { used.add(fen4(x.fen)); return extra; };
+  const meta = x => ({ link: x.g.link, opp: x.g.opp, date: x.g.date, ...context(x.g, x.ply) });
+  // SIMPLIFY: every clean technical exchange decision, whether the game choice was right or wrong
+  const simplify = [];
+  for (const x of sel.simplify) {
+    const r = D[`simplify:${x.gid}:${x.ply}`]; const P_ = profile(x.g);
+    const bt = r.trades.filter(t => t.score != null).sort((a, b) => b.score - a.score)[0]; const s1 = swing(x.fen, bt.pv || []), s2 = swing(x.fen, r.keep.pv);
+    const quiet = s1.lo > -2 && s1.hi < 2 && s2.lo > -2 && s2.hi < 2 && !new Pos(x.fen).inCheck();
+    const techn = technical(P_, x.ply) || x.trades.some(t => t.kind === 'queens');
+    const K = moveInfo(x.fen, r.keep.uci); const keepTactic = K && (K.cap || K.check) && x.diff < 0 && r.lines[1] && CL(r.lines[0].score) - CL(r.lines[1].score) >= 200;
+    const inRange = Math.max(x.tradeS, x.keepS) <= 800 && Math.min(x.tradeS, x.keepS) >= -400 && Math.max(x.tradeS, x.keepS) >= -250;
+    if (!(quiet && techn && Math.abs(x.diff) >= 120 && Math.abs(x.diff) <= 300 && inRange && !keepTactic)) continue;
+    if (used.has(fen4(x.fen)) || simplify.some(y => y.gid === x.gid)) continue;
+    const trade = x.answer !== 'keep' && x.answer !== 'improve'; const kinds = x.kinds;
+    const choices = kinds.map(k => ({ key: k, label: x.pawnEnding && k === bt.kind ? 'Trade into the pawn ending' : LABEL[k] })); choices.push({ key: 'keep', label: 'Keep pieces' });
+    if (r.later) choices.push({ key: 'improve', label: 'Improve first' });
+    // accepted answers: trades within 0.4 of the best trade; not trading now = keep or improve
+    const accept = trade ? r.trades.filter(t => t.score != null && t.score >= bt.score - 40).map(t => t.kind) : ['keep', 'improve'].filter(k => choices.some(c => c.key === k));
+    const ahead = myMaterial(x.fen) >= 2; const quietSan = K ? K.san : null;
+    let explain;
+    if (trade && x.pawnEnding) explain = 'Trade into the pawn ending. It is better for you than keeping the pieces.';
+    else if (trade && ahead) explain = `${LABEL[x.answer]}. You are ahead in material, and the exchange brings the win closer.`;
+    else if (trade) explain = x.tradeS > 50 ? `${LABEL[x.answer]}. It keeps more of your advantage than avoiding the exchange.` : `${LABEL[x.answer]}. Avoiding the exchange leaves you worse.`;
+    else if (x.answer === 'improve') explain = `Improve first: ${quietSan}. The exchange is stronger a move later.`;
+    else if (x.pawnEnding) explain = 'Keep the pieces. The pawn ending would be worse for you.';
+    else if (x.keepS >= 100) explain = 'Keep the pieces. The exchange gives away much of your advantage.';
+    else explain = 'Keep the pieces. The exchange leaves you worse off.';
+    let gain = null;
+    if (trade && x.pawnEnding) gain = 'Reach a favorable pawn ending';
+    else if (x.answer === 'improve' && K && K.t === 'k') gain = 'Activate my king';
+    else if (x.answer === 'improve' && K && K.t === 'r') gain = 'Improve my rook';
+    const correctPv = trade ? (r.trades.find(t => t.kind === x.answer) || bt).pv : r.keep.pv;
+    simplify.push(pick(x, { id: 's' + x.gid + '-' + x.ply, gid: x.gid, fen: x.fen, color: x.fen.split(' ')[1], choices, answer: x.answer, accept, explain,
+      gain: gain ? { answer: gain, options: [gain, ...GAINS.filter(q => q !== gain).sort(() => 0.5 - Math.random()).slice(0, 2)].sort() } : null,
+      line: pvSan(x.fen, correctPv, 8), game: { played: x.played, traded: x.playedTrade, right: trade ? x.playedTrade : !x.playedTrade },
+      tags: x.tags, ending: x.ending, ...meta(x) }));
+  }
+  const play = kind => sel[kind].filter(x => x.hq && !used.has(fen4(x.fen))).map(x => pick(x, { id: kind[0] + x.gid + '-' + x.ply, gid: x.gid, fen: x.fen, color: x.fen.split(' ')[1],
+    startCp: CL(x.best.score), tags: x.tags, ending: x.ending, game: { played: x.played.san, best: x.best.san, lesson: x.lesson }, ...meta(x) }));
+  const convert = play('convert'), hold = play('hold');
+  // Tactical failures while better → Repair (find the move) or Calculate (forcing line), never Technique
+  const T = JSON.parse(fs.readFileSync(path.join(ROOT, 'data/training.json'), 'utf8'));
+  const existing = new Set([...T.drills.map(d => fen4(d.fen)), ...T.calc.map(c => fen4(c.fen))]);
+  const repair = [], calc = []; let dup = 0, blunders = 0;
+  for (const x of sel.convert) {
+    const b = CL(x.best.score), pl = CL(x.played.score); if (!(b >= 180 && b <= 800)) continue;
+    if (!(x.tactic || x.loss > 400 || pl < -150)) continue; blunders++;
+    const k = fen4(x.fen); if (existing.has(k) || used.has(k)) { dup++; continue; } existing.add(k);
+    const r = D[`convert:${x.gid}:${x.ply}`]; const B = moveInfo(x.fen, r.lines[0].uci); const pvB = pvSan(x.fen, r.lines[0].pv, 10);
+    const color = x.fen.split(' ')[1]; const before = x.g.moves.slice(0, x.ply);
+    if ((B.cap || B.check) && pvB.length >= 5) calc.push({ id: `calc:${k}|${B.san}`, src: 'mine', drillId: null, fam: null, fen: x.fen, side: color, kind: 'tactical', line: pvB, cp: b, played: x.played.san, level: 'medium', games: [x.gid], origin: 'technique-scan' });
+    else repair.push({ id: `${k}|${x.played.san}`, legacyFam: null, fam: null, col: color, fen: x.fen, path: before, moveNo: `${Math.floor(x.ply / 2) + 1}${color === 'w' ? '.' : '…'}${x.played.san}`, played: x.played.san, sfBest: B.san, good: [B.san],
+      cpBest: b, cpPlayed: pl, loss: +(winPct(b) - winPct(pl)).toFixed(1), verdict: 'mistake', pvBest: pvB, pvRef: pvSan(x.fen, r.played.pv, 8),
+      type: swing(x.fen, r.played.pv).lo <= -2 ? 'allowed-tactic' : swing(x.fen, r.lines[0].pv).hi >= 2 ? 'missed-win' : 'allowed-tactic', tags: [], why: [], n: 1, seen: 1, games: [x.gid], origin: 'technique-scan' });
+  }
+  const strip = xs => xs.map(({ gid, ...x }) => x);
+  const out = { built: new Date().toISOString().slice(0, 10), source: 'raw/games/*.pgn (localchessexpert, 3+2), Stockfish 19 lite depth 16-18',
+    simplify: strip(simplify), convert: strip(convert), hold: strip(hold), repair, calc };
+  fs.writeFileSync(path.join(ROOT, 'data/technique.json'), JSON.stringify(out));
+  const ends = xs => { const o = {}; for (const x of xs) o[x.ending] = (o[x.ending] || 0) + 1; return JSON.stringify(o); };
+  console.log(`technique.json: simplify ${simplify.length} (game choice right ${simplify.filter(x => x.game.right).length}, wrong ${simplify.filter(x => !x.game.right).length}) · convert ${convert.length} · hold ${hold.length}`);
+  console.log(`  endings: simplify ${ends(simplify)} · convert ${ends(convert)} · hold ${ends(hold)}`);
+  console.log(`tactical conversion failures: ${blunders} → repair ${repair.length} · calculate ${calc.length} · duplicates rejected ${dup}`);
+}
+
 if (process.argv[1] && process.argv[1].endsWith('build-technique.mjs')) {
   const cmd = process.argv[2] || 'stats';
   if (cmd === 'stats') stats();
   if (cmd === 'scan') scan();
   if (cmd === 'deep') deep();
   if (cmd === 'report') report();
+  if (cmd === 'build') build();
   if (cmd === 'candidates') { const C = candidates(); console.log(Object.fromEntries(Object.entries(C).map(([k, v]) => [k, v.length]))); }
 }
 export { readJson, DEEP, CL, swing, candidates };

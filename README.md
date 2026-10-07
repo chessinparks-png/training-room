@@ -9,3 +9,8 @@ Canty trainer: `data/canty.json` is built from `data/source/canty-white.pgn` by 
 
 Run locally: `node serve.mjs`, then open http://localhost:8765/ — opening `index.html` directly as a file
 cannot work (browsers block JavaScript modules on file://).
+
+Technique: `data/technique.json` is built from my full games in `raw/games/*.pgn` with the bundled Stockfish,
+offline: `node tools/build-technique.mjs scan && node tools/build-technique.mjs deep && node tools/build-technique.mjs build`
+(`report` prints the candidate report). Tactical failures found there join Repair / Calculate instead.
+Check it with `node tools/test-technique.mjs`.
