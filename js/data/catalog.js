@@ -12,11 +12,11 @@ async function load(name) {
   }
   return cache[name];
 }
-export const C = { rep: null, training: null, mine: null, imported: [] };
+export const C = { rep: null, training: null, mine: null, imported: [], owned: new Set() };
 
 export async function initCatalog() {
   // each dataset is independent: a missing one degrades its screens, it does not stop the app
-  const [rep, training, mine, tech] = await Promise.allSettled([load('repertoire.json'), load('training.json'), load('games-mine.json'), load('technique.json')]);
+  const [rep, training, mine, tech, tac] = await Promise.allSettled([load('repertoire.json'), load('training.json'), load('games-mine.json'), load('technique.json'), load('tactics.json')]);
   const failed = [rep, training, mine].filter(x => x.status === 'rejected').map(x => x.reason.message);
   C.rep = rep.value || { families: {}, legacy: { summary: { white: { n: 0 }, black: { n: 0 } }, withMoves: 0 }, modelStats: {} };
   C.training = training.value || { drills: [], decisions: [], plans: [], calc: [] }; C.mine = mine.value || [];
@@ -27,6 +27,10 @@ export async function initCatalog() {
   // optional: tactical failures from my full games (tools/build-technique.mjs) join Repair / Calculate, never duplicated
   if (tech.value) { const f4 = f => f.split(' ').slice(0, 4).join(' '); const have = new Set([...C.training.drills, ...C.training.calc].map(x => f4(x.fen)));
     for (const [list, extra] of [[C.training.drills, tech.value.repair || []], [C.training.calc, tech.value.calc || []]]) for (const x of extra) if (!have.has(f4(x.fen))) { have.add(f4(x.fen)); list.push(x); } }
+  // Personal Tactics (data/tactics.json) owns its positions: they leave Repair and Calculate, so no card is scheduled twice
+  C.owned = new Set();
+  if (tac.value) { const f4 = f => f.split(' ').slice(0, 4).join(' '); const own = new Set(tac.value.cards.map(c => c.own));
+    for (const k of ['drills', 'calc']) C.training[k] = C.training[k].filter(x => { if (!own.has(f4(x.fen))) return true; C.owned.add(x.id); return false; }); }
   C.drillById = new Map(C.training.drills.map(d => [d.id, d]));
   C.itemById = new Map([...C.training.decisions, ...C.training.plans, ...C.training.calc].map(x => [x.id, x]));
   if (failed.length) throw new Error(failed.join('; '));
@@ -36,6 +40,7 @@ export const modelGames = () => load('games-model.json').then(gs => gs.concat(C.
 export const book = () => load('book.json');
 export const technique = () => load('technique.json');
 export const courses = () => load('courses.json');
+export const tactics = () => load('tactics.json');
 export const legacy = () => load('legacy/drill-room-data.json');
 export function myGames() { const byId = new Map(C.mine.map(g => [g.id, g])); for (const g of C.imported.filter(x => x.kind === 'mine')) byId.set(g.id, g); return [...byId.values()]; }
 

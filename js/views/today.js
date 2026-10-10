@@ -51,7 +51,10 @@ async function run(el, cur, setUn) {
     catch (e) { console.error(e); toast(`${s.label} could not load — skipped. (${e.message})`, 5000); done(); }
   }
   async function runStep(i, s, results, done) {
-    if (s.kind === 'recog') series(i, await nextRepair(s.n, { fresh: s.n, skipDue: true, types: TACTICAL }), (h, it, next) => mountRepairItem(h, it, { onDone: next, label: 'RECOGNITION · FIND IT FAST' }), results, done);
+    // recognition: due Personal Tactics cards first, then new tactical positions from Repair as before
+    if (s.kind === 'recog') { const tac = await import('./tactics.js'); const due = (await tac.dueCards(s.n).catch(() => [])).map(card => ({ card }));
+      const rest = due.length < s.n ? await nextRepair(s.n - due.length, { fresh: s.n - due.length, skipDue: true, types: TACTICAL }) : [];
+      series(i, [...due, ...rest], (h, it, next) => (it.card ? tac.drill(h, it.card, next, { label: 'RECOGNITION · TACTICS' }) : mountRepairItem(h, it, { onDone: next, label: 'RECOGNITION · FIND IT FAST' })), results, done); }
     else if (s.kind === 'review') series(i, await nextRepair(s.n, { fresh: 0 }), (h, it, next) => mountRepairItem(h, it, { onDone: next }), results, done);
     else if (s.kind === 'calc') series(i, stepItems(s), (h, it, next) => mountCalc(h, it, { level: s.level, onDone: next }), results, done);
     else if (s.kind === 'clock') series(i, await clockQueue(s.n), (h, it, next) => mountClock(h, it, { onDone: next }), results, done);

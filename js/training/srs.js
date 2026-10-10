@@ -5,6 +5,7 @@ export const BOX_DAYS = [0.007, 1, 3, 7, 16, 35]; // 10 min → 1 → 3 → 7 �
 export const MASTERED_BOX = 4;
 const DAY = 864e5;
 import * as store from '../data/store.js';
+import { C } from '../data/catalog.js';
 
 // kind: 'move' (find the move), 'calc' (calculate a line), 'plan', 'model' (model decision)
 // ref: id of the source training item (legacy drill id, calc id, decision id, plan id) or an
@@ -28,7 +29,8 @@ export async function grade(id, firstTry, extra = {}) {
   r.due = Date.now() + days * DAY; r.lastSeen = Date.now(); Object.assign(r, extra);
   await store.put('repair', r); return r;
 }
-export async function items() { return store.all('repair'); }
+// positions now owned by Personal Tactics are reviewed there, not here
+export async function items() { return (await store.all('repair')).filter(r => !C.owned.has(r.ref)); }
 export async function due(now = Date.now()) { return (await items()).filter(r => r.due <= now).sort((a, b) => a.box - b.box || a.due - b.due); }
 export async function stats() {
   const all = await items(); const now = Date.now();

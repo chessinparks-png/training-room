@@ -19,5 +19,7 @@ Repertoire courses: `data/courses.json` is built from the model players' blitz g
 `node tools/build-repertoire.mjs build` (`node tools/build-repertoire.mjs --sanity` prints the source report).
 Check it with `node tools/test-courses.mjs`. `raw/` and `tools/` are build inputs only and are not deployed.
 
-Tactics (report only, no data file yet): `node tools/build-tactics.mjs` classifies the tactical positions already stored
-for Repair / Calculate (pattern, failure type, card type, quality) from their stored Stockfish lines — no new engine run.
+Tactics: `data/tactics.json` (Personal Tactics V1, about 60 cards) is built from the tactical positions already stored for
+Repair / Calculate by `node tools/build-tactics.mjs build` — classified from their stored Stockfish lines, no new engine run
+(`node tools/build-tactics.mjs` alone prints the report). Tactics owns its positions: they leave Repair and Calculate.
+Check it with `node tools/test-tactics.mjs`.

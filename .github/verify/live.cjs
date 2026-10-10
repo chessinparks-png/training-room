@@ -41,11 +41,12 @@ const fails = []; const ok = (cond, msg) => { console.log((cond ? 'PASS ' : 'FAI
   ok(/Firouzja/i.test(await text()), 'repertoire Pirc shows Firouzja data');
 
   // calculation with board entry
-  const it = T.calc.find(c => c.side === 'w' && c.line.length >= 5);
+  const own = new Set((await (await p.request.get(base + 'data/tactics.json')).json()).cards.map(c => c.own)); // owned by Tactics, not in Calculate
+  const it = T.calc.find(c => c.side === 'w' && c.line.length >= 5 && !own.has(c.fen.split(' ').slice(0, 4).join(' ')));
   await p.goto(base + '#/calculate/' + encodeURIComponent(it.id)); await p.waitForTimeout(2000);
   const bw = await p.evaluate(() => Math.round(document.querySelector('.cb').getBoundingClientRect().width));
   ok(bw >= 340, 'chessboard visible, width ' + bw + ' of 390');
-  await p.tap('[data-a=enter]'); await p.waitForTimeout(900);
+  await p.tap('[data-a=enter]'); await p.waitForTimeout(900); await p.evaluate(() => window.scrollTo(0, 0)); await p.waitForTimeout(300); // keep the top rank clear of the sticky header
   let fen = it.fen;
   for (let i = 0; i < 3; i++) { const [a, c] = await sq(fen, it.line[i]); await tap(a); await tap(c);
     fen = await p.evaluate(async ([f, s]) => { const { Pos } = await import('./js/chess/core.js'); const x = new Pos(f); x.play(s); return x.fen(); }, [fen, it.line[i]]); }

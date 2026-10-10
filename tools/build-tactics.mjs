@@ -7,6 +7,7 @@
 // one primary category (+ optional secondary), a failure type, a card type and a quality verdict.
 //   node tools/build-tactics.mjs           report
 //   node tools/build-tactics.mjs --json F  also write the per-position classification to F
+//   node tools/build-tactics.mjs build     also write the Personal Tactics V1 course to data/tactics.json (--lessons lists them)
 import fs from 'fs'; import path from 'path';
 import { Pos, BL, K, sqName, mFrom, mTo } from '../js/chess/core.js';
 import { winPct } from '../js/analysis/quality.js';
@@ -68,7 +69,7 @@ function swing(fen, line, n = 8) {
 // Every attacker move in the first 6 plies is checked on the board for the classic shapes; a shape only counts
 // when the line then really wins material on the squares it created (or mates).
 function motif(fen, line) {
-  const att = new Pos(fen).turn, opp = att ^ BL; const sw = swing(fen, line, 10); const found = {}; const mark = (c, i) => { if (!(c in found)) found[c] = i; };
+  const att = new Pos(fen).turn, opp = att ^ BL; const sw = swing(fen, line, 10); const found = {}, detail = {}; const mark = (c, i, d = {}) => { if (!(c in found)) { found[c] = i; detail[c] = { i, ...d }; } };
   const moves = []; { const q = new Pos(fen); for (let i = 0; i < Math.min(10, line.length); i++) { const ii = info(q, line[i]); if (!ii) break; moves.push(ii); q.make(ii.m); } }
   if (!moves.length) return { cats: [], conf: 'low', sw };
   const capsAfter = i => moves.slice(i + 1).map((m, k) => ({ ...m, i: i + 1 + k })).filter(m => m.i % 2 === 0 && m.cap);
@@ -78,7 +79,7 @@ function motif(fen, line) {
     const m = moves[i];
     if (i % 2) { q.make(m.m); continue; }
     // loose: takes an undefended piece, or one worth more than the taker
-    if (m.cap && typeOf(m.cap) !== 1 && (!defended(q, m.t, opp) || V[typeOf(m.cap)] > V[typeOf(m.pc)])) mark('LOOSE_PIECE', i);
+    if (m.cap && typeOf(m.cap) !== 1 && (!defended(q, m.t, opp) || V[typeOf(m.cap)] > V[typeOf(m.pc)])) mark('LOOSE_PIECE', i, { sq: m.t, t: typeOf(m.cap), loose: !defended(q, m.t, opp), by: typeOf(m.pc) });
     // removal of the defender: captures a piece that guarded a square the line takes on later
     const guarded = []; if (m.cap) for (let s = 0; s < 128; s++) { if (s & 0x88) { s += 7; continue; } const x = at(q, s); if (x && colorOf(x) === opp && s !== m.t && typeOf(x) !== K && q.pieceAttacks(m.t, s)) guarded.push(s); }
     // overloaded: the recapturing piece leaves another piece it guarded
@@ -86,10 +87,10 @@ function motif(fen, line) {
     const before = new Map(); for (let s = 0; s < 128; s++) { if (s & 0x88) { s += 7; continue; } const x = at(q, s); if (x && colorOf(x) === att && RAYS[typeOf(x)] && s !== m.f) before.set(s, targets(q, s).map(t => t.s)); }
     q.make(m.m);
     const later = capsAfter(i);
-    if (m.cap && later.some(c => guarded.includes(c.t))) mark('REMOVAL_OF_DEFENDER', i);
+    { const c = later.find(c => guarded.includes(c.t)); if (m.cap && c) mark('REMOVAL_OF_DEFENDER', i, { t: typeOf(m.cap), guarded: c.t }); }
     const tg = targets(q, m.t).filter(t => t.t === K || V[t.t] >= 3 || !defended(q, t.s, opp));
-    if (tg.length >= 2 && later.some(c => tg.some(t => t.s === c.t) || c.f === m.t)) mark('FORK', i);
-    const ps = pinSkewer(q, m.t); if (ps && later.some(c => c.t === ps.front || c.t === ps.back)) mark('PIN_OR_SKEWER', i);
+    if (tg.length >= 2 && later.some(c => tg.some(t => t.s === c.t) || c.f === m.t)) mark('FORK', i, { targets: tg.slice(0, 2).map(t => t.t) });
+    const ps = pinSkewer(q, m.t); if (ps && later.some(c => c.t === ps.front || c.t === ps.back)) mark('PIN_OR_SKEWER', i, { kind: ps.kind, front: typeOf(at(q, ps.front)), back: typeOf(at(q, ps.back)) });
     for (const [s, prev] of before) { if (at(q, s) === 0 || colorOf(at(q, s)) !== att) continue; const now = targets(q, s).filter(t => !prev.includes(t.s) && (t.t === K || V[t.t] >= 3)); if (now.length && (m.check || later.some(c => now.some(t => t.s === c.t)))) mark('DISCOVERED_ATTACK', i); }
   }
   // the gain must be real
@@ -104,7 +105,9 @@ function motif(fen, line) {
   // one extra category only (MISCOUNTED_CAPTURE); a discovered attack is taught as a forcing move
   cats = [...new Set(cats.map(c => c === 'DISCOVERED_ATTACK' ? 'MISSED_FORCING_MOVE' : c))];
   const conf = !cats.length ? 'low' : cats.length <= 2 ? 'high' : 'medium';
-  return { cats, conf, sw, first: moves[0] };
+  // the most valuable piece the attacker takes before the gain settles
+  let wins = 0; for (let i = 0; i <= Math.min(moves.length - 1, sw.hiAt < 0 ? 5 : sw.hiAt); i += 2) if (moves[i].cap) wins = Math.max(wins, typeOf(moves[i].cap));
+  return { cats, conf, sw, first: moves[0], detail, wins, line: moves.map(m => m.san) };
 }
 
 // ---------- pool: every stored tactical position from MY games ----------
@@ -177,7 +180,7 @@ for (const x of pool) {
   const SHAPE = ['FORK', 'PIN_OR_SKEWER', 'KING_EXPOSURE', 'OVERLOADED_DEFENDER', 'REMOVAL_OF_DEFENDER'];
   if (calcFail && playedI && playedI.cap !== undefined && (playedI.cap || playedI.check) && cats && !SHAPE.includes(cats[0])) cats = ['MISCOUNTED_CAPTURE', ...cats.filter(c => c !== 'LOOSE_PIECE' && c !== 'MISSED_FORCING_MOVE')];
   cats = (cats || []).filter((c, i, a) => a.indexOf(c) === i).slice(0, 2);
-  Object.assign(r, { lesson, cats, conf, failure, card, cpBest: x.cpBest, cpPlayed: x.cpPlayed, swing: (lesson === 'theirs' && theirs ? theirs.sw : mine.sw), late, midSeq, threatBefore });
+  Object.assign(r, { x, mine, theirs, refHitsPlayed, lesson, cats, conf, failure, card, cpBest: x.cpBest, cpPlayed: x.cpPlayed, swing: (lesson === 'theirs' && theirs ? theirs.sw : mine.sw), late, midSeq, threatBefore });
   // 4) quality: a clear, short, tactical lesson
   const sw = r.swing; const reach = sw.mate ? 0 : sw.hiAt;
   if (!cats.length) r.out = 'unclear lesson';
@@ -207,4 +210,86 @@ console.log('lesson side:', count(hq, r => r.lesson), ' confidence:', count(hq, 
 console.log('source:', count(hq, r => r.src), ' also in:', count(hq, r => r.also));
 console.log('primary × failure:'); const pf = {}; for (const r of hq) { const k = r.cats[0]; pf[k] = pf[k] || {}; pf[k][r.failure] = (pf[k][r.failure] || 0) + 1; } console.log(pf);
 console.log('repeated (n>1):', hq.filter(r => r.n > 1).length, ' found a move late:', hq.filter(r => r.late).length, ' threat already there:', hq.filter(r => r.threatBefore).length);
-const i = process.argv.indexOf('--json'); if (i > 0) fs.writeFileSync(process.argv[i + 1], JSON.stringify(out, null, 1));
+const i = process.argv.indexOf('--json'); if (i > 0) fs.writeFileSync(process.argv[i + 1], JSON.stringify(out.map(({ x, mine, theirs, ...r }) => r), null, 1));
+
+// ---------- build data/tactics.json: the Personal Tactics V1 course ----------
+// Only the strict V1 pool: high confidence, the gain shows inside 3 plies (or mate), not a Calculate card.
+// Cards keep what the UI needs; the lesson and hint are written from the stored lines, no engine numbers.
+const QUOTA = { LOOSE_PIECE: 18, MISCOUNTED_CAPTURE: 14, FORK: 8, KING_EXPOSURE: 8, PIN_OR_SKEWER: 5, MISSED_FORCING_MOVE: 4, REMOVAL_OF_DEFENDER: 3 };
+const NAME = ['', 'pawn', 'knight', 'bishop', 'rook', 'queen', 'king'];
+const PROMPT = { FIND_THE_MOVE: 'What did you miss?', THREAT_CHECK: 'What is your opponent threatening?', FORCING_MOVE: 'What forcing move should you examine first?', DEFEND: 'How do you keep the position together?' };
+const HINT = {
+  LOOSE_PIECE: ['Something is undefended.', 'After your move, which of your pieces is undefended?'],
+  MISCOUNTED_CAPTURE: ['Count attackers and defenders before you capture.', 'Count attackers and defenders before you capture.'],
+  FORK: ['Look for one move that attacks two things.', 'Can one enemy move attack two of your pieces?'],
+  KING_EXPOSURE: ['Look at the king.', 'Look at your king: which checks does your opponent get?'],
+  PIN_OR_SKEWER: ['Look along the lines through the king and queen.', 'Which of your pieces stand on one line with your king or queen?'],
+  MISSED_FORCING_MOVE: ['Checks and captures first.', 'Which checks and captures does your opponent have?'],
+  REMOVAL_OF_DEFENDER: ['Which piece is doing the defending?', 'Which of your pieces is doing the defending?'],
+};
+// the null-move position: the same board with the opponent to move (their threat, played on the board)
+const flip = fen => { const f = fen.split(' '); f[1] = f[1] === 'w' ? 'b' : 'w'; f[3] = '-'; return f.join(' '); };
+const sq = s => sqName(s);
+function lessonFor(r) {
+  const x = r.x, theirs = r.lesson === 'theirs'; const M = theirs ? r.theirs : r.mine; const d = (M.detail || {})[r.cats[0]] || {}; const L = M.line; const your = theirs ? 'your ' : 'the ';
+  const mv = i => (i ? `${L[0]}, then ${L[i]}` : L[0]); const after = r.card === 'DEFEND' ? `After ${x.played}, ` : '';
+  const cap = s => (/^(after|your|the) /.test(s) ? s[0].toUpperCase() + s.slice(1) : s);
+  const wins = M.wins ? `${your}${NAME[M.wins]}` : 'material';
+  switch (r.cats[0]) {
+    case 'MISCOUNTED_CAPTURE':
+      if (!x.pvRef[1]) return null;
+      if (r.lesson === 'mine') return `Take with ${x.best}, not ${x.played}: ${x.played} loses to ${x.pvRef[1]}.`;
+      return r.refHitsPlayed ? `${x.played} fails: ${x.pvRef[1].replace(/[+#]/g, '').slice(-2)} is still defended (${x.pvRef[1]}).` : `${x.played} fails to ${x.pvRef[1]}, which wins ${wins}.`;
+    case 'LOOSE_PIECE': { const l = d; if (!l.sq || l.i) return null;
+      const what = `${your}${NAME[l.t]} on ${sq(l.sq)}`;
+      return l.loose ? cap(`${after}${what} is loose: ${mv(l.i)} takes it.`) : cap(`${after}${mv(l.i)} wins ${what} for a ${NAME[l.by]}.`); }
+    case 'FORK': if (!d.targets) return null; return cap(`${after}${mv(d.i)} forks ${d.targets[0] === d.targets[1] ? `both ${your.trim() === 'your' ? 'your ' : ''}${NAME[d.targets[0]]}s` : `${your}${NAME[d.targets[0]]} and ${NAME[d.targets[1]]}`}.`);
+    case 'PIN_OR_SKEWER': if (!d.kind || d.front === 1) return null; return cap(`${after}${mv(d.i)} ${d.kind === 'pin' ? 'pins' : 'skewers'} ${your}${NAME[d.front]} ${d.kind === 'pin' ? 'to the' : 'and the'} ${NAME[d.back]}.`);
+    case 'REMOVAL_OF_DEFENDER': if (!d.t) return null; return cap(`${after}${mv(d.i)} removes ${your}${NAME[d.t]}, the defender of ${sq(d.guarded)}.`);
+    case 'KING_EXPOSURE': {
+      if (M.sw.mate) { const k = L.findIndex((s, i) => i % 2 === 0 && s.endsWith('#')); const ln = L.slice(0, k + 1);
+        return theirs ? cap(`${after}${ln.length <= 3 ? ln.join(' ') + ' is mate.' : mv(0) + ' starts a mating attack on your king.'}`) : `${mv(0)} starts a mating attack.`; }
+      if (M.wins <= 1) return null; // a run of checks that only wins a pawn is not a clear lesson
+      return cap(`${after}${mv(0)} opens ${theirs ? 'your' : 'the'} king, and the checks win ${wins}.`); }
+    case 'MISSED_FORCING_MOVE': return theirs ? cap(`${after}${mv(0)} wins ${wins}.`) : `Look at ${mv(0)} first: it wins ${M.wins ? 'the ' + NAME[M.wins] : 'material'}.`;
+  }
+  return null;
+}
+function build(hq) {
+  const pool = hq.filter(r => r.card !== 'CALCULATE' && r.conf === 'high' && (r.swing.mate || r.swing.hiAt <= 3) && QUOTA[r.cats[0]]);
+  // the shot played on the board must be legal from the position shown
+  const cards = []; const rejected = {};
+  const rank = r => (r.card === 'DEFEND' || r.card === 'THREAT_CHECK' ? 0 : 1) + (r.cats.length > 1 ? 0.5 : 0) + (r.swing.mate ? 0 : r.swing.hiAt) * 0.1 - (r.n > 1 ? 1 : 0);
+  for (const [motifName, n] of Object.entries(QUOTA)) {
+    const list = pool.filter(r => r.cats[0] === motifName).sort((a, b) => rank(a) - rank(b));
+    let k = 0;
+    for (const r of list) {
+      if (k >= n) break; const x = r.x;
+      // MISCOUNTED_CAPTURE: only a short, clear refutation (it hits the capturing piece within 3 plies)
+      if (motifName === 'MISCOUNTED_CAPTURE' && r.lesson === 'theirs' && !(r.refHitsPlayed && r.swing.hiAt <= 3)) { rejected['long refutation'] = (rejected['long refutation'] || 0) + 1; continue; }
+      const lesson = lessonFor(r); if (!lesson) { rejected['no clear lesson'] = (rejected['no clear lesson'] || 0) + 1; continue; }
+      const threat = r.card === 'THREAT_CHECK';
+      const fen = threat ? flip(x.fen) : x.fen;
+      const moves = threat ? [x.pvRef[1]] : [...new Set((x.good && x.good.length ? x.good : [x.best]))];
+      const p = new Pos(fen); if (!moves.every(m => p.parseSan(m))) { rejected['illegal answer'] = (rejected['illegal answer'] || 0) + 1; continue; }
+      const theirsSide = r.lesson === 'theirs';
+      cards.push({
+        id: 'tac:' + fen4(x.fen).replace(/[\s/]/g, ''), game: x.games[0] || null, own: fen4(x.fen), fen, side: x.col, type: r.card,
+        motif: r.cats[0], motif2: r.cats[1] || null, moves, hint: HINT[motifName][theirsSide ? 1 : 0], lesson,
+        prev: (x.path || []).slice(-4), cont: threat ? [] : (x.pvBest || []).slice(0, 4), // a threat card has no line: in the game my move came first
+        order: cards.length,
+      });
+      k++;
+    }
+  }
+  // Learn order: one motif after another, round robin, so a session is never six loose pieces in a row
+  const lanes = Object.keys(QUOTA).map(k => cards.filter(c => c.motif === k)); let o = 0;
+  for (let i = 0; lanes.some(l => l[i]); i++) for (const l of lanes) if (l[i]) l[i].order = o++;
+  cards.sort((a, b) => a.order - b.order);
+  const outFile = path.join(ROOT, 'data/tactics.json');
+  fs.writeFileSync(outFile, JSON.stringify({ built: new Date().toISOString().slice(0, 10), source: 'tools/build-tactics.mjs build (stored Stockfish lines, no new analysis)', prompts: PROMPT, cards }));
+  console.log(`\nTACTICS V1: ${cards.length} cards → data/tactics.json`, rejected);
+  console.log('motif:', count(cards, c => c.motif)); console.log('card:', count(cards, c => c.type));
+  if (process.argv.includes('--lessons')) for (const c of cards) console.log(`${c.type.padEnd(13)} ${c.motif.padEnd(20)} ${c.moves.join('/').padEnd(10)} ${c.lesson}`);
+}
+if (process.argv.includes('build')) build(hq);
