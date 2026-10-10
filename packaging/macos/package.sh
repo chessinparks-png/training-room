@@ -5,7 +5,7 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"; PK="$REPO/packaging/macos"; OUT="$REPO/dist"; WORK="$(mktemp -d)"
 APP="$WORK/Training Room/Training Room.app"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/site"
 (cd "$REPO" && tar --exclude=./.git --exclude=./.github --exclude=./raw --exclude=./tools --exclude=./packaging --exclude=./dist \
-  --exclude='*.pgn' --exclude=./README.md --exclude=./.gitignore -cf - .) | tar -xf - -C "$APP/Contents/Resources/site"
+  --exclude='*.pgn' --exclude=./README.md --exclude=./.gitignore --exclude=./serve.mjs --exclude=./.nojekyll --exclude=./.claude -cf - .) | tar -xf - -C "$APP/Contents/Resources/site"
 (cd "$PK" && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "$APP/Contents/Resources/server-arm64" . \
           && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$APP/Contents/Resources/server-x86_64" .)
 cp "$PK/launcher.sh" "$APP/Contents/MacOS/Training Room"; cp "$PK/serve.pl" "$APP/Contents/Resources/serve.pl"; cp "$PK/Info.plist" "$APP/Contents/Info.plist"
