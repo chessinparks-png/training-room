@@ -172,6 +172,8 @@ const out = cards.map((c, i) => {
   return { id: 'nc3:' + c.k.replace(/[\s/]/g, ''), course: 'nc3', branch: c.branch, order: i, fen: c.fen, line: c.line, oppMove: c.line.length ? c.line[c.line.length - 1] : null, move: c.move,
     explain: explain(c.line, c.move, c.fen), plan: planOf([...c.line, c.move]), leaf: !kids.length, stat: c.stat, alts: [], continuation: cont, transposition: false, ref: c.ref, player: c.player, source: c.source };
 });
+// learn order: shallow positions first (your answer to every first move before the deep lines), tree order within a depth
+out.sort((a, b) => a.line.length - b.line.length || a.order - b.order).forEach((c, i) => { c.order = i; });
 const used = new Set(out.map(c => c.plan)); const NAMES = { Jobava: 'Jobava', JobavaC5: 'Jobava: 4.e4 against …c5', JobavaBf5: 'Jobava: f3–g4 against …Bf5', French: 'French with e5', ViennaGambit: 'Vienna Gambit (…Nf6 3.f4)', Vienna: 'Vienna: f4 later', GrandPrix: 'Grand Prix', Attack150: '150 Attack', Nf6e4: '1…Nf6 2.e4' };
 const plans = Object.entries(PLAN).filter(([, t]) => used.has(t)).map(([k, t]) => ({ branch: NAMES[k], text: t }));
 const by = {}; for (const c of out) by[c.branch] = (by[c.branch] || 0) + 1;
