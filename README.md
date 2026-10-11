@@ -23,3 +23,7 @@ Tactics: `data/tactics.json` (Personal Tactics V1, about 60 cards) is built from
 Repair / Calculate by `node tools/build-tactics.mjs build` — classified from their stored Stockfish lines, no new engine run
 (`node tools/build-tactics.mjs` alone prints the report). Tactics owns its positions: they leave Repair and Calculate.
 Check it with `node tools/test-tactics.mjs`.
+
+My 1…Nc6 system (Black): `data/nc6.json` is built by `node tools/build-nc6.mjs` from a hand-written repertoire tree
+(moves, reasons and plans), every move checked with the bundled Stockfish and counted in my own games. It appears as a
+fourth Repertoire course. Check it with `node tools/test-nc6.mjs`.

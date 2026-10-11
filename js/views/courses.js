@@ -30,17 +30,18 @@ export async function mount(el, params) {
 async function counts(C) { const S = await srs(); const now = Date.now(); const c = { new: 0, learning: 0, known: 0, due: 0 }; for (const x of C.cards) { c[stateOf(S[x.id])]++; if (S[x.id] && S[x.id].due <= now) c.due++; } return c; }
 async function index(el, D) {
   const rows = []; for (const C of D.courses) { const n = await counts(C); rows.push(`<a class="group-row" href="#/courses/${C.id}"><span class="t">${esc(C.title)}<small class="tech-q">${C.color === 'w' ? 'White' : 'Black'} · ${C.cards.length} positions</small></span><span class="c">${n.due ? `<span class="chip accent">${n.due} due</span> ` : ''}<span class="muted small">${n.new} new · ${n.learning} learning · ${n.known} known</span></span><span class="go">→</span></a>`); }
-  el.innerHTML = `<div class="tech-home"><div class="stack" style="--s:18px"><div class="kicker">Repertoire</div><h1 class="h1">Three courses.</h1><p class="lede">Built from the players’ own blitz games. Learn the move, train it, review it when it is due.</p></div><div class="group-list">${rows.join('')}</div></div>`;
+  el.innerHTML = `<div class="tech-home"><div class="stack" style="--s:18px"><div class="kicker">Repertoire</div><h1 class="h1">${['No', 'One', 'Two', 'Three', 'Four', 'Five'][D.courses.length] || D.courses.length} courses.</h1><p class="lede">Built from the players’ own blitz games${D.courses.some(c => c.plans) ? ', plus your own 1…Nc6 system' : ''}. Learn the move, train it, review it when it is due.</p></div><div class="group-list">${rows.join('')}</div></div>`;
 }
 async function home(el, C) {
   const n = await counts(C);
   el.innerHTML = `<div class="tech-home"><div class="stack" style="--s:18px"><div class="kicker">${C.color === 'w' ? 'White' : 'Black'} · ${esc(C.player)}</div><h1 class="h1">${esc(C.title.split('—')[1].trim())}.</h1>
-      <p class="lede">${C.cards.length} positions from ${C.games} blitz games.</p>
+      <p class="lede">${C.plans ? `${C.cards.length} positions, each checked with Stockfish and matched against your own games.` : `${C.cards.length} positions from ${C.games} blitz games.`}</p>
       <div class="canty-stats"><div><b class="num">${n.new}</b><span class="label">New</span></div><div><b class="num">${n.learning}</b><span class="label">Learning</span></div><div><b class="num">${n.known}</b><span class="label">Known</span></div><div><b class="num">${n.due}</b><span class="label">Due</span></div></div></div>
     <div class="group-list">
       <a class="group-row" href="#/courses/${C.id}/learn"><span class="t">Learn<small class="tech-q">See the repertoire move and play it.</small></span><span class="c muted small">${n.new} new</span><span class="go">→</span></a>
       <a class="group-row" href="#/courses/${C.id}/train"><span class="t">Train<small class="tech-q">What would you play?</small></span><span class="c muted small">${n.learning + n.known ? `${n.learning + n.known} learned` : 'learn first, or test yourself'}</span><span class="go">→</span></a>
       <a class="group-row" href="#/courses/${C.id}/review"><span class="t">Review<small class="tech-q">Positions that are due.</small></span><span class="c">${n.due ? `<span class="chip accent">${n.due} due</span>` : '<span class="muted small">nothing due</span>'}</span><span class="go">→</span></a>
+      ${C.plans ? `<details class="plans"><summary class="label">The plans</summary>${C.plans.map(p => `<p class="small"><b>${esc(p.branch)}.</b> ${esc(p.text.replace(/^[^:.]{3,30}: /, ''))}</p>`).join('')}</details>` : ''}
       <p class="footnote"><a href="#/courses">All courses</a></p></div></div>`;
 }
 
@@ -70,6 +71,8 @@ function enter(board, x) {
 }
 const context = (S, x) => { S.context.innerHTML = line(x.line.slice(-6), x.line.length - Math.min(6, x.line.length)); S.underRight.textContent = x.branch; };
 const refHtml = x => (x.ref && x.ref.link ? `<a href="${esc(x.ref.link)}" target="_blank" rel="noopener">${esc(x.player.split(' ').pop())} vs ${esc(x.ref.opp)}</a>` : '');
+// end of a line in a course with plans (data/nc6.json): the plan to follow from here
+const planHtml = x => (x.leaf && x.plan ? `<p class="small"><b>Plan:</b> ${esc(x.plan)}</p>` : '');
 const contHtml = x => (x.continuation.length > 1 ? `<p class="small ink2">Then: ${line(x.continuation, x.line.length)}</p>` : '');
 
 // LEARN: the move, one sentence, and you play it.
@@ -77,7 +80,7 @@ function learn(host, C, x, next) {
   const S = stage(host, { label: `${C.title.toUpperCase()} · LEARN` });
   const board = makeBoard(S.boardHost, x.fen, { orientation: C.color, movable: C.color, onMove: mv => played(mv) });
   enter(board, x); context(S, x); setTimeout(() => board.setArrows(arrows(x.fen, [[x.move, 'model']])), 400);
-  S.side.innerHTML = `<p class="prompt">${esc(x.move)}<small>${esc(x.explain)}</small></p>${contHtml(x)}<p class="footnote">${esc(x.stat)} ${refHtml(x)}</p><p class="small muted fb">Play ${esc(x.move)} on the board.</p>`;
+  S.side.innerHTML = `<p class="prompt">${esc(x.move)}<small>${esc(x.explain)}</small></p>${contHtml(x)}${planHtml(x)}<p class="footnote">${esc(x.stat)} ${refHtml(x)}</p><p class="small muted fb">Play ${esc(x.move)} on the board.</p>`;
   let done = false;
   function played(mv) {
     if (done) return; if (mv.san.replace(/[+#]/g, '') !== x.move.replace(/[+#]/g, '')) { S.side.querySelector('.fb').textContent = `Play ${x.move}.`; return; }
@@ -100,7 +103,9 @@ function drill(host, C, x, next) {
     if (same(mv.san)) {
       done = true; p.make(mv.m); board.setPosition(p, { last: [mFrom(mv.m), mTo(mv.m)] }); board.setMovable(null); board.setArrows([]);
       const firstTry = misses === 0 && !revealed; grade(x.id, firstTry);
-      fb().innerHTML = `<p class="verdict">${firstTry ? 'Correct.' : 'That’s it.'}</p><p class="why">${esc(x.explain)}</p>`;
+      fb().innerHTML = `<p class="verdict">${firstTry ? 'Correct.' : 'That’s it.'}</p><p class="why">${esc(x.explain)}</p>${planHtml(x)}`;
+      // a plan takes longer to read than a move: wait for Next
+      if (planHtml(x)) { fb().insertAdjacentHTML('beforeend', '<div class="actions"><button class="btn primary" data-a="next">Next</button></div>'); fb().querySelector('[data-a=next]').onclick = () => next({ id: x.id, firstTry }); return; }
       setTimeout(() => next({ id: x.id, firstTry }), firstTry ? 900 : 1400); return;
     }
     misses++; board.setPosition(new Pos(x.fen), { animate: true });
