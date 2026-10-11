@@ -57,6 +57,9 @@ const FORCE = {
   'Nc3 g6 e4 Bg7': 'd4', 'Nc3 g6 e4 Bg7 d4 d6': 'Be3', 'Nc3 g6 e4 Bg7 d4 c6': 'Be3', 'Nc3 d6 e4 Nf6': 'd4', 'Nc3 d6 e4 Nf6 d4 g6': 'Be3', 'Nc3 Nf6 e4 d6': 'd4', 'Nc3 Nf6 e4 d6 d4 g6': 'Be3',
   'Nc3 d6 e4 g6': 'd4', 'Nc3 g6 e4 d6': 'd4',
 };
+// Black replies to cover even when they are rare in the model games (my own weak lines, the Vienna)
+const EXTRA = { 'Nc3 d5 d4': ['Bf5'], 'Nc3 d5 d4 Nf6 Bf4': ['Bf5'], 'Nc3 e5 e4': ['Nc6', 'Bc5', 'Nf6'], 'Nc3 e5 e4 Nc6 Bc4': ['Nf6', 'Bc5'], 'Nc3 e5 e4 Bc5': ['Nf6', 'Nc6'] };
+FORCE['Nc3 e5 e4 Nc6 Bc4 Nf6'] = 'd3'; FORCE['Nc3 e5 e4 Nc6 Bc4 Bc5'] = 'd3'; FORCE['Nc3 e5 e4 Bc5 Bc4 Nf6'] = 'd3'; FORCE['Nc3 e5 e4 Bc5 Bc4 Nc6'] = 'd3';
 const branchOf = line => {
   const s = line.join(' ');
   if (/^Nc3 (e6 d4 d5 e4|d5 d4 e6 e4|Nc6 d4 d5 e4 e6)/.test(s)) return 'French';
@@ -106,6 +109,7 @@ function explain(line, san, fen) {
   const piece = { N: 'knight', B: 'bishop', R: 'rook', Q: 'queen', K: 'king' }[san[0]] || 'pawn'; const to = san.replace(/[+#]/g, '').slice(-2);
   if (san.includes('x')) return last.replace(/[+#]/g, '').slice(-2) === to ? `Recapture with the ${piece}.` : `Take on ${to} with the ${piece}.`;
   if (san.includes('+')) return `Check with the ${piece}, gaining time.`;
+  if (piece === 'king') return `Step the king to ${to}: it is safe there for now.`;
   if (/^[gh][45]$/.test(san)) return 'Kingside pawn storm: gain space toward the king.';
   if (piece === 'pawn') return `${san}: gain space and support the centre.`;
   const fr = m ? mFrom(m) >> 4 : 0, tr = m ? mTo(m) >> 4 : 0;
@@ -153,6 +157,7 @@ async function black(p, line, wCount, engineRun) {
   // early in a line, cover more of Black's options (e.g. 2.d4 Bf5); later, only the main replies
   const early = line.length <= 5; const minC = tot >= 50 ? 5 : 2;
   let pick = reps.filter(([m, c]) => c >= minC && (first ? FORCE['Nc3 ' + m] : c / tot >= (early ? 0.06 : 0.12))).slice(0, first ? 9 : early ? 5 : 3).map(([m]) => m);
+  for (const m of EXTRA[line.join(' ')] || []) if (!pick.includes(m)) pick.push(m);
   if (!pick.length && engineRun < 2) { const ev = await evalBest(p.fen()); pick = [new Pos(p.fen()).uciToSan(ev[0].pv[0])]; engineRun++; }
   for (const m of pick) { const q = new Pos(p.fen()); if (!q.play(m)) continue; await white(q, [...line, m], wCount, engineRun); }
 }
