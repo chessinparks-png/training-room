@@ -4,7 +4,7 @@
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"; PK="$REPO/packaging/macos"; OUT="$REPO/dist"; WORK="$(mktemp -d)"
 APP="$WORK/Training Room/Training Room.app"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/site"
-(cd "$REPO" && tar --exclude=./.git --exclude=./.github --exclude=./raw --exclude=./tools --exclude=./packaging --exclude=./dist \
+(cd "$REPO" && tar --exclude=./.git --exclude=./.github --exclude=./raw --exclude=./tools --exclude=./packaging --exclude=./dist --exclude=./downloads \
   --exclude='*.pgn' --exclude=./README.md --exclude=./.gitignore --exclude=./serve.mjs --exclude=./.nojekyll --exclude=./.claude -cf - .) | tar -xf - -C "$APP/Contents/Resources/site"
 (cd "$PK" && CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags="-s -w" -o "$APP/Contents/Resources/server-arm64" . \
           && CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o "$APP/Contents/Resources/server-x86_64" .)
