@@ -27,3 +27,8 @@ Check it with `node tools/test-tactics.mjs`.
 My 1…Nc6 system (Black): `data/nc6.json` is built by `node tools/build-nc6.mjs` from a hand-written repertoire tree
 (moves, reasons and plans), every move checked with the bundled Stockfish and counted in my own games. It appears as a
 fourth Repertoire course. Check it with `node tools/test-nc6.mjs`.
+
+My 1.Nc3 system (White): `data/nc3.json` is built by `node tools/build-nc3.mjs` from the model players' blitz games in
+`raw/models/` (Bortnyk for the Jobava, Aborigen100500 for 1.Nc3 move orders and the Vienna, wgraif / Arash Tahbaz for the
+Grand Prix, Ginger GM for the attacking set-ups) plus the system's own choices, every White move checked with Stockfish.
+It appears as a Repertoire course. Check it with `node tools/test-nc3.mjs`.

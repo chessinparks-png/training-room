@@ -39,8 +39,8 @@ export async function initCatalog() {
 export const modelGames = () => load('games-model.json').then(gs => gs.concat(C.imported.filter(g => g.kind === 'model')));
 export const book = () => load('book.json');
 export const technique = () => load('technique.json');
-// Repertoire courses: the model-player courses plus my own 1…Nc6 system (data/nc6.json), when present
-export const courses = () => Promise.all([load('courses.json'), load('nc6.json').catch(() => null)]).then(([d, mine]) => (mine ? { ...d, courses: [...d.courses, ...mine.courses] } : d));
+// Repertoire courses: the model-player courses plus my own systems (data/nc3.json, data/nc6.json), when present
+export const courses = () => Promise.all([load('courses.json'), load('nc3.json').catch(() => null), load('nc6.json').catch(() => null)]).then(([d, ...mine]) => ({ ...d, courses: [...d.courses, ...mine.filter(Boolean).flatMap(m => m.courses)] }));
 export const tactics = () => load('tactics.json');
 export const legacy = () => load('legacy/drill-room-data.json');
 export function myGames() { const byId = new Map(C.mine.map(g => [g.id, g])); for (const g of C.imported.filter(x => x.kind === 'mine')) byId.set(g.id, g); return [...byId.values()]; }

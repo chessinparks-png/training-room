@@ -1,5 +1,5 @@
 {
- "version": "2026-10-11-nc6",
+ "version": "2026-10-11-nc3",
  "files": [
   "./",
   "index.html",
@@ -85,6 +85,7 @@
   "data/courses.json",
   "js/views/tactics.js",
   "data/tactics.json",
-  "data/nc6.json"
+  "data/nc6.json",
+  "data/nc3.json"
  ]
 }
